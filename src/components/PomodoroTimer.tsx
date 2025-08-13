@@ -48,12 +48,10 @@ export default function PomodoroTimer() {
   };
 
   // 載入用戶目標設置
-  const loadUserGoals = useCallback(async () => {
-    if (!auth.currentUser) return;
-    
+  const loadUserGoals = useCallback(async (userId: string) => {
     try {
       const goalsRef = collection(db, 'user_goals');
-      const q = query(goalsRef, where('userId', '==', auth.currentUser.uid));
+      const q = query(goalsRef, where('userId', '==', userId));
       const querySnapshot = await getDocs(q);
       
       if (!querySnapshot.empty) {
@@ -70,17 +68,18 @@ export default function PomodoroTimer() {
 
   // 儲存用戶目標設置
   const saveUserGoals = async (newGoals: UserGoals) => {
-    if (!auth.currentUser) return;
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
     
     try {
       const goalsRef = collection(db, 'user_goals');
-      const q = query(goalsRef, where('userId', '==', auth.currentUser.uid));
+      const q = query(goalsRef, where('userId', '==', currentUser.uid));
       const querySnapshot = await getDocs(q);
       
       if (querySnapshot.empty) {
         // 創建新的目標設置
         await addDoc(goalsRef, {
-          userId: auth.currentUser.uid,
+          userId: currentUser.uid,
           dailyMinutes: newGoals.dailyMinutes,
           weeklyMinutes: newGoals.weeklyMinutes,
           createdAt: new Date()
@@ -102,12 +101,11 @@ export default function PomodoroTimer() {
     }
   };
 
-  const loadRecentTasks = useCallback(() => {
-    if (!auth.currentUser) return;
-    
-    const tasksRef = collection(db, 'tasks');
+  const loadRecentTasks = useCallback((userId: string) => {
+    const tasksRef = collection(db, 'pomodoroTasks');
     const q = query(
       tasksRef,
+      where('userId', '==', userId),
       orderBy('timestamp', 'desc'),
       limit(10)
     );
@@ -127,16 +125,20 @@ export default function PomodoroTimer() {
               completed: data.completed as boolean,
               timestamp: data.timestamp.toDate()
             } satisfies TaskRecord;
-          })
-          .filter(task => task.userId === auth.currentUser?.uid)
-          .slice(0, 5);
+          });
         
         setRecentTasks(tasks);
       } catch (error) {
         console.error('讀取任務記錄失敗:', error);
       }
-    }, (error) => {
-      console.error('監聽任務記錄失敗:', error);
+    }, (error: { code?: string; message?: string }) => {
+      if (error?.code === 'failed-precondition') {
+        console.error('需要創建複合索引。請訪問 Firebase Console 創建索引：', error.message);
+      } else if (error?.code === 'permission-denied') {
+        console.error('沒有訪問權限:', error);
+      } else {
+        console.error('監聽任務記錄失敗:', error);
+      }
     });
   }, []);
 
@@ -151,7 +153,7 @@ export default function PomodoroTimer() {
     // 儲存已完成的任務到 Firestore
     if (auth.currentUser && task) {
       try {
-        const tasksRef = collection(db, 'tasks');
+        const tasksRef = collection(db, 'pomodoroTasks');
         await addDoc(tasksRef, {
           userId: auth.currentUser.uid,
           task: task,
@@ -210,20 +212,18 @@ export default function PomodoroTimer() {
   const progress = 
     (timeLeft / (isFocusTime ? settings.focusTime * 60 : settings.breakTime * 60)) * 100;
 
-  // 當使用者登入狀態改變時，訂閱任務記錄的更新並載入目標設置
+  // 監聽 Firebase Auth 狀態變化並訂閱任務記錄
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
-    
-    if (auth.currentUser) {
-      unsubscribe = loadRecentTasks();
-      loadUserGoals();
-    }
-
-    // 清理函數：當組件卸載或 auth.currentUser 改變時取消訂閱
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
+    const unsubscribeAuth = auth.onAuthStateChanged(user => {
+      if (user) {
+        loadRecentTasks(user.uid);
+        loadUserGoals(user.uid);
       }
+    });
+
+    // 清理函數：組件卸載時取消所有訂閱
+    return () => {
+      unsubscribeAuth();
     };
   }, [loadRecentTasks, loadUserGoals]);
 
@@ -322,36 +322,59 @@ export default function PomodoroTimer() {
                                 const cycleStart = task.timestamp.getTime();
                                 const breakTask = recentTasks.find(
                                   t => t.type === 'break' &&
-                                  Math.abs(t.timestamp.getTime() - cycleStart) < 60000 // 1分鐘內的休息時間
+                                  t.task === task.task &&
+                                  Math.abs(t.timestamp.getTime() - cycleStart) < 300000 // 5分鐘內的休息時間
                                 );
+                                
+                                const totalDuration = task.duration + (breakTask?.duration || 0);
                                 
                                 acc.push({
                                   id: task.id,
-                                  focusTask: task,
-                                  breakTask: breakTask,
+                                  task: task.task,
+                                  totalDuration,
+                                  focusDuration: task.duration,
+                                  breakDuration: breakTask?.duration || 0,
+                                  completed: task.completed,
                                   timestamp: task.timestamp
                                 });
                               }
                               return acc;
-                            }, [] as Array<{id: string; focusTask: TaskRecord; breakTask?: TaskRecord; timestamp: Date}>)
+                            }, [] as Array<{
+                              id: string;
+                              task: string;
+                              totalDuration: number;
+                              focusDuration: number;
+                              breakDuration: number;
+                              completed: boolean;
+                              timestamp: Date;
+                            }>)
                             .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-                            .map(({ id, focusTask, breakTask }) => (
+                            .map(({ id, task, totalDuration, focusDuration, breakDuration, completed, timestamp }) => (
                               <ListGroup.Item key={id} className="d-flex justify-content-between align-items-start py-3">
                                 <div>
-                                  <div className="fw-bold">{focusTask.task || '未命名任務'}</div>
+                                  <div className="fw-bold">{task || '未命名任務'}</div>
                                   <small className="text-muted">
-                                    {focusTask.timestamp.toLocaleString()}
+                                    {timestamp.toLocaleString()}
                                   </small>
                                 </div>
-                                <div className="d-flex gap-2 align-items-center">
-                                  <Badge bg="primary" pill>
-                                    專注 {focusTask.duration} 分鐘
-                                  </Badge>
-                                  {breakTask && (
-                                    <Badge bg="success" pill>
-                                      休息 {breakTask.duration} 分鐘
+                                <div className="d-flex flex-column align-items-end">
+                                  <div className="d-flex gap-2 align-items-center mb-1">
+                                    <Badge bg={completed ? "success" : "warning"}>
+                                      總時間: {totalDuration} 分鐘
                                     </Badge>
-                                  )}
+                                  </div>
+                                  <div className="d-flex gap-2 align-items-center">
+                                    <small>
+                                      <Badge bg="primary" pill>
+                                        專注 {focusDuration} 分鐘
+                                      </Badge>
+                                      {breakDuration > 0 && (
+                                        <Badge bg="success" pill className="ms-1">
+                                          休息 {breakDuration} 分鐘
+                                        </Badge>
+                                      )}
+                                    </small>
+                                  </div>
                                 </div>
                               </ListGroup.Item>
                             ))}
@@ -380,10 +403,14 @@ export default function PomodoroTimer() {
                       <ListGroup.Item className="d-flex justify-content-between align-items-center">
                         <span>完成任務數</span>
                         <span>
-                          {recentTasks
-                            .filter(t => t.type === 'focus' && 
-                              t.timestamp.toDateString() === new Date().toDateString())
-                            .length} 個
+                          {new Set(
+                            recentTasks
+                              .filter(t => 
+                                t.type === 'focus' && 
+                                t.timestamp.toDateString() === new Date().toDateString()
+                              )
+                              .map(t => t.task)
+                          ).size} 個
                         </span>
                       </ListGroup.Item>
                     </ListGroup>
@@ -394,9 +421,24 @@ export default function PomodoroTimer() {
                         <span>總專注時間</span>
                         <span>
                           {recentTasks
-                            .filter(t => t.type === 'focus' && 
-                              t.timestamp >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+                            .filter(t => 
+                              t.type === 'focus' && 
+                              t.timestamp >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+                            )
                             .reduce((acc, t) => acc + t.duration, 0)} 分鐘
+                        </span>
+                      </ListGroup.Item>
+                      <ListGroup.Item className="d-flex justify-content-between align-items-center">
+                        <span>完成任務數</span>
+                        <span>
+                          {new Set(
+                            recentTasks
+                              .filter(t => 
+                                t.type === 'focus' && 
+                                t.timestamp >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+                              )
+                              .map(t => t.task)
+                          ).size} 個
                         </span>
                       </ListGroup.Item>
                       <ListGroup.Item className="d-flex justify-content-between align-items-center">
@@ -404,8 +446,10 @@ export default function PomodoroTimer() {
                         <span>
                           {Math.round(
                             recentTasks
-                              .filter(t => t.type === 'focus' && 
-                                t.timestamp >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+                              .filter(t => 
+                                t.type === 'focus' && 
+                                t.timestamp >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+                              )
                               .reduce((acc, t) => acc + t.duration, 0) / 7
                           )} 分鐘
                         </span>

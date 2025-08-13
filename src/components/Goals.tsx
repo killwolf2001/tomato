@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, Form, Button, ListGroup, ProgressBar } from 'react-bootstrap';
-import { collection, addDoc, query, where, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, query, where, updateDoc, doc, onSnapshot, QuerySnapshot, DocumentData } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 interface Goal {
@@ -16,22 +16,27 @@ export default function Goals() {
   const [newGoal, setNewGoal] = useState({ title: '', targetMinutes: 0 });
 
   useEffect(() => {
-    loadGoals();
+    const unsubscribe = loadGoals();
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
-  const loadGoals = async () => {
+  const loadGoals = () => {
     if (!auth.currentUser) return;
 
     const goalsRef = collection(db, 'goals');
     const q = query(goalsRef, where('userId', '==', auth.currentUser.uid));
     
-    const querySnapshot = await getDocs(q);
-    const loadedGoals: Goal[] = [];
-    querySnapshot.forEach((doc) => {
-      loadedGoals.push({ id: doc.id, ...doc.data() } as Goal);
+    return onSnapshot(q, (querySnapshot: QuerySnapshot<DocumentData>) => {
+      const loadedGoals: Goal[] = [];
+      querySnapshot.forEach((doc) => {
+        loadedGoals.push({ id: doc.id, ...doc.data() } as Goal);
+      });
+      setGoals(loadedGoals);
     });
-
-    setGoals(loadedGoals);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -49,7 +54,6 @@ export default function Goals() {
       });
 
       setNewGoal({ title: '', targetMinutes: 0 });
-      loadGoals();
     } catch (error) {
       console.error('Error adding goal:', error);
     }
@@ -71,7 +75,6 @@ export default function Goals() {
         currentMinutes,
         completed: currentMinutes >= goal.targetMinutes
       });
-      loadGoals();
     } catch (error) {
       console.error('Error updating goal:', error);
     }

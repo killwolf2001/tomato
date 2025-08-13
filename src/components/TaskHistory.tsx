@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Card, ListGroup, Badge } from 'react-bootstrap';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 interface Task {
   id: string;
-  title: string;
+  task: string;  // 修改為與 Firestore 中的欄位名稱一致
   timestamp: Date;
   duration: number;
+  type: 'focus' | 'break';
   completed: boolean;
 }
 
@@ -15,29 +16,72 @@ export default function TaskHistory() {
   const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
-    const loadTasks = async () => {
-      if (!auth.currentUser) return;
+    let unsubscribe: (() => void) | undefined;
 
-      const tasksRef = collection(db, 'tasks');
+    const loadTasks = (userId: string) => {
+      const tasksRef = collection(db, 'pomodoroTasks');
       const q = query(
         tasksRef,
-        where('userId', '==', auth.currentUser.uid)
+        where('userId', '==', userId),
+        orderBy('timestamp', 'desc'),
+        limit(10)
       );
 
-      const querySnapshot = await getDocs(q);
-      const loadedTasks: Task[] = [];
-      querySnapshot.forEach((doc) => {
-        loadedTasks.push({
+      return onSnapshot(q, (snapshot) => {
+        const loadedTasks: Task[] = snapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
           timestamp: doc.data().timestamp.toDate(),
-        } as Task);
-      });
+        } as Task));
 
-      setTasks(loadedTasks.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()));
+        // 按任務名稱和時間戳對任務進行分組
+        const groupedTasks = loadedTasks.reduce<Task[]>((acc, task) => {
+          // 只添加專注時間的記錄
+          if (task.type === 'focus') {
+            // 查找對應的休息時間記錄
+            const breakTask = loadedTasks.find(
+              t => t.type === 'break' && 
+                  t.task === task.task && 
+                  Math.abs(t.timestamp.getTime() - task.timestamp.getTime()) < 300000 // 5分鐘內
+            );
+            // 如果找到對應的休息時間，把休息時間也加到持續時間中
+            if (breakTask) {
+              task.duration += breakTask.duration;
+            }
+            acc.push(task);
+          }
+          return acc;
+        }, []);
+
+        // 按時間戳排序
+        groupedTasks.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+        setTasks(groupedTasks);
+      }, (error: { code?: string; message?: string }) => {
+        if (error?.code === 'failed-precondition') {
+          console.error('需要創建複合索引。請訪問 Firebase Console 創建索引：', error.message);
+        } else if (error?.code === 'permission-denied') {
+          console.error('沒有訪問權限:', error);
+        } else {
+          console.error('監聽任務記錄失敗:', error);
+        }
+      });
     };
 
-    loadTasks();
+    const unsubscribeAuth = auth.onAuthStateChanged(user => {
+      if (user) {
+        unsubscribe = loadTasks(user.uid);
+      } else {
+        setTasks([]);
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
   }, []);
 
   return (
@@ -50,15 +94,18 @@ export default function TaskHistory() {
             className="d-flex justify-content-between align-items-center"
           >
             <div>
-              {task.title}
+              {task.task || '未命名任務'}
               <br />
               <small className="text-muted">
                 {task.timestamp.toLocaleDateString()} {task.timestamp.toLocaleTimeString()}
               </small>
             </div>
-            <div>
+            <div className="d-flex gap-2 align-items-center">
               <Badge bg={task.completed ? 'success' : 'warning'}>
-                {task.duration} 分鐘
+                總時間: {task.duration} 分鐘
+              </Badge>
+              <Badge bg="info">
+                {task.type === 'focus' ? '專注' : '休息'}
               </Badge>
             </div>
           </ListGroup.Item>
