@@ -144,7 +144,10 @@ export default function PomodoroTimer() {
 
   const handleTimerComplete = useCallback(async () => {
     try {
-      const audio = new Audio('/notification.mp3');
+      // 根據目前階段播放不同音樂
+      const audio = isFocusTime
+        ? new Audio('/25min.mp3')
+        : new Audio('/5min.mp3');
       audio.play().catch(error => console.log('播放通知音效失敗:', error));
     } catch (error) {
       console.log('創建音效物件失敗:', error);
