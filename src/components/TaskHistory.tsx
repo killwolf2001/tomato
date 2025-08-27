@@ -118,7 +118,7 @@ export default function TaskHistory() {
                 {task.task || '未命名任務'}
                 <br />
                 <small className="text-muted">
-                  {task.timestamp.toLocaleTimeString()}
+                  {task.timestamp.toLocaleTimeString()} ~ {new Date(task.timestamp.getTime() + task.duration * 60 * 1000).toLocaleTimeString()}
                 </small>
               </div>
               <div className="d-flex gap-2 align-items-center">

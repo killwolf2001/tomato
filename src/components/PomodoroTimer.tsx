@@ -361,35 +361,39 @@ export default function PomodoroTimer() {
                               timestamp: Date;
                             }>)
                             .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
-                            .map(({ id, task, totalDuration, focusDuration, breakDuration, completed, timestamp }) => (
-                              <ListGroup.Item key={id} className="d-flex justify-content-between align-items-start py-3">
-                                <div>
-                                  <div className="fw-bold">{task || '未命名任務'}</div>
-                                  <small className="text-muted">
-                                    {timestamp.toLocaleString()}
-                                  </small>
-                                </div>
-                                <div className="d-flex flex-column align-items-end">
-                                  <div className="d-flex gap-2 align-items-center mb-1">
-                                    <Badge bg={completed ? "success" : "warning"}>
-                                      總時間: {totalDuration} 分鐘
-                                    </Badge>
-                                  </div>
-                                  <div className="d-flex gap-2 align-items-center">
-                                    <small>
-                                      <Badge bg="primary" pill>
-                                        專注 {focusDuration} 分鐘
-                                      </Badge>
-                                      {breakDuration > 0 && (
-                                        <Badge bg="success" pill className="ms-1">
-                                          休息 {breakDuration} 分鐘
-                                        </Badge>
-                                      )}
+                            .map(({ id, task, totalDuration, focusDuration, breakDuration, completed, timestamp }) => {
+                              // 結束時間為專注開始+專注分鐘數
+                              const endTime = new Date(timestamp.getTime() + focusDuration * 60 * 1000);
+                              return (
+                                <ListGroup.Item key={id} className="d-flex justify-content-between align-items-start py-3">
+                                  <div>
+                                    <div className="fw-bold">{task || '未命名任務'}</div>
+                                    <small className="text-muted">
+                                      {timestamp.toLocaleString()} ~ {endTime.toLocaleString()}
                                     </small>
                                   </div>
-                                </div>
-                              </ListGroup.Item>
-                            ))}
+                                  <div className="d-flex flex-column align-items-end">
+                                    <div className="d-flex gap-2 align-items-center mb-1">
+                                      <Badge bg={completed ? "success" : "warning"}>
+                                        總時間: {totalDuration} 分鐘
+                                      </Badge>
+                                    </div>
+                                    <div className="d-flex gap-2 align-items-center">
+                                      <small>
+                                        <Badge bg="primary" pill>
+                                          專注 {focusDuration} 分鐘
+                                        </Badge>
+                                        {breakDuration > 0 && (
+                                          <Badge bg="success" pill className="ms-1">
+                                            休息 {breakDuration} 分鐘
+                                          </Badge>
+                                        )}
+                                      </small>
+                                    </div>
+                                  </div>
+                                </ListGroup.Item>
+                              );
+                            })}
                         </ListGroup>
                       </div>
                     </Card>
