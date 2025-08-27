@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, Form, Button, ListGroup, ProgressBar } from 'react-bootstrap';
-import { collection, addDoc, query, where, updateDoc, doc, onSnapshot, QuerySnapshot, DocumentData } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, getDocs, QuerySnapshot, DocumentData, doc, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 interface Goal {
@@ -14,15 +14,55 @@ interface Goal {
 export default function Goals() {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [newGoal, setNewGoal] = useState({ title: '', targetMinutes: 0 });
+  const [taskStats, setTaskStats] = useState<{ [task: string]: number }>({});
 
   useEffect(() => {
-    const unsubscribe = loadGoals();
+    let unsubscribe: (() => void) | undefined;
+    if (auth.currentUser) {
+      unsubscribe = loadGoals();
+      loadTaskStats();
+    }
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
+      if (unsubscribe) unsubscribe();
     };
+     
   }, []);
+
+  // 取得所有歷史任務名稱
+  const [allTaskNames, setAllTaskNames] = useState<string[]>([]);
+
+  const loadAllTaskNames = async () => {
+    if (!auth.currentUser) return;
+    const tasksRef = collection(db, 'pomodoroTasks');
+    const q = query(tasksRef, where('userId', '==', auth.currentUser.uid));
+    const querySnapshot = await getDocs(q);
+    const names = new Set<string>();
+    querySnapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.type === 'focus' && data.task) {
+        names.add(data.task);
+      }
+    });
+    setAllTaskNames(Array.from(names));
+  };
+
+  useEffect(() => { loadAllTaskNames(); }, []);
+
+  // 讀取歷史任務完成分鐘數
+  const loadTaskStats = async () => {
+    if (!auth.currentUser) return;
+    const tasksRef = collection(db, 'pomodoroTasks');
+    const q = query(tasksRef, where('userId', '==', auth.currentUser.uid));
+    const querySnapshot = await getDocs(q);
+    const stats: { [task: string]: number } = {};
+    querySnapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.type === 'focus') {
+        stats[data.task] = (stats[data.task] || 0) + (data.duration || 0);
+      }
+    });
+    setTaskStats(stats);
+  };
 
   const loadGoals = () => {
     if (!auth.currentUser) return;
@@ -59,25 +99,12 @@ export default function Goals() {
     }
   };
 
-  const updateGoalProgress = async (goalId: string, currentMinutes: number) => {
-    if (!auth.currentUser) return;
 
-    const goalRef = doc(db, 'goals', goalId);
-    const goal = goals.find(g => g.id === goalId);
-    
-    if (!goal) {
-      console.error('Goal not found');
-      return;
-    }
-
-    try {
-      await updateDoc(goalRef, {
-        currentMinutes,
-        completed: currentMinutes >= goal.targetMinutes
-      });
-    } catch (error) {
-      console.error('Error updating goal:', error);
-    }
+  // 刪除目標
+  const handleDeleteGoal = async (goalId: string) => {
+    if (!window.confirm('確定要刪除此目標？')) return;
+    await deleteDoc(doc(db, 'goals', goalId));
+  // manualProgress 已移除，無需處理
   };
 
   return (
@@ -87,11 +114,22 @@ export default function Goals() {
         <Form onSubmit={handleSubmit} className="mb-3">
           <Form.Group className="mb-3">
             <Form.Label>追蹤任務名稱</Form.Label>
-            <Form.Control
-              type="text"
+            <Form.Select
               value={newGoal.title}
-              onChange={(e) => setNewGoal({ ...newGoal, title: e.target.value })}
+              onChange={e => setNewGoal({ ...newGoal, title: e.target.value })}
               required
+            >
+              <option value="">選擇現有任務</option>
+              {allTaskNames.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </Form.Select>
+            <Form.Control
+              className="mt-2"
+              type="text"
+              placeholder="或自行輸入新任務名稱"
+              value={newGoal.title}
+              onChange={e => setNewGoal({ ...newGoal, title: e.target.value })}
             />
           </Form.Group>
           <Form.Group className="mb-3">
@@ -108,32 +146,29 @@ export default function Goals() {
         </Form>
 
         <ListGroup>
-          {goals.map((goal) => (
-            <ListGroup.Item key={goal.id}>
-              <div className="d-flex justify-content-between align-items-center mb-2">
-                <h6>{goal.title}</h6>
-                <div className="d-flex align-items-center gap-2">
-                  <Form.Control
-                    type="number"
-                    size="sm"
-                    style={{ width: '80px' }}
-                    value={goal.currentMinutes}
-                    onChange={(e) => {
-                      const newMinutes = Math.max(0, parseInt(e.target.value) || 0);
-                      updateGoalProgress(goal.id, newMinutes);
-                    }}
-                    min="0"
-                    max={goal.targetMinutes}
-                  />
-                  <small>/ {goal.targetMinutes} 分鐘</small>
+          {goals.map((goal) => {
+            const autoDone = taskStats[goal.title] || 0;
+            const percent = Math.min(100, (autoDone / goal.targetMinutes) * 100);
+            return (
+              <ListGroup.Item key={goal.id}>
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <h6>{goal.title}</h6>
+                  <div className="d-flex align-items-center gap-2">
+                    <span>{autoDone} / {goal.targetMinutes} 分鐘</span>
+                    <Button variant="outline-danger" size="sm" onClick={() => handleDeleteGoal(goal.id)}>刪除</Button>
+                  </div>
                 </div>
-              </div>
-              <ProgressBar
-                now={(goal.currentMinutes / goal.targetMinutes) * 100}
-                variant={goal.completed ? 'success' : 'primary'}
-              />
-            </ListGroup.Item>
-          ))}
+                <ProgressBar
+                  now={percent}
+                  variant={percent >= 100 ? 'success' : 'primary'}
+                  label={`${Math.round(percent)}%`}
+                />
+                <div className="mt-1" style={{ fontSize: '0.9em', color: '#666' }}>
+                  {/* 歷史自動統計完成百分比：{goal.targetMinutes > 0 ? Math.round((autoDone / goal.targetMinutes) * 100) : 0}% */}
+                </div>
+              </ListGroup.Item>
+            );
+          })}
         </ListGroup>
       </Card.Body>
     </Card>

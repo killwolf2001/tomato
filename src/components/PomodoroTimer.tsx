@@ -273,11 +273,21 @@ export default function PomodoroTimer() {
                 </Form.Group>
                 <Form.Group>
                   <Form.Label>當前任務</Form.Label>
+                  <Form.Select
+                    className="mb-2"
+                    value={task}
+                    onChange={e => setTask(e.target.value)}
+                  >
+                    <option value="">選擇已存在任務</option>
+                    {[...new Set(recentTasks.map(t => t.task).filter(Boolean))].map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </Form.Select>
                   <Form.Control
                     type="text"
-                    placeholder="輸入當前任務..."
+                    placeholder="或手動輸入新任務..."
                     value={task}
-                    onChange={(e) => setTask(e.target.value)}
+                    onChange={e => setTask(e.target.value)}
                   />
                 </Form.Group>
               </div>
@@ -403,7 +413,7 @@ export default function PomodoroTimer() {
                         </span>
                       </ListGroup.Item>
                       <ListGroup.Item className="d-flex justify-content-between align-items-center">
-                        <span>完成任務數</span>
+                        <span>完成番茄數</span>
                         <span>
                           {new Set(
                             recentTasks
@@ -431,7 +441,7 @@ export default function PomodoroTimer() {
                         </span>
                       </ListGroup.Item>
                       <ListGroup.Item className="d-flex justify-content-between align-items-center">
-                        <span>完成任務數</span>
+                        <span>完成番茄數</span>
                         <span>
                           {new Set(
                             recentTasks
