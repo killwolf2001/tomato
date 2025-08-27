@@ -34,13 +34,13 @@ export default function Home() {
       <Row>
         <Col lg={8} className="mx-auto">
           <Tabs defaultActiveKey="history" className="mb-3">
-            <Tab eventKey="history" title="任務歷史">
+            <Tab eventKey="history" title="歷史任務列表">
               <TaskHistory />
             </Tab>
-            <Tab eventKey="statistics" title="統計資訊">
+            <Tab eventKey="statistics" title="任務統計資訊">
               <Statistics />
             </Tab>
-            <Tab eventKey="goals" title="目標追蹤">
+            <Tab eventKey="goals" title="指定任務追蹤">
               <Goals />
             </Tab>
           </Tabs>

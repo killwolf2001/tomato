@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+
+import React, { useEffect, useState } from 'react';
 import { Card, ListGroup, Badge } from 'react-bootstrap';
 import { collection, query, where, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
@@ -56,7 +57,7 @@ export default function TaskHistory() {
         // 按時間戳排序
         groupedTasks.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-        setTasks(groupedTasks);
+  setTasks(groupedTasks);
       }, (error: { code?: string; message?: string }) => {
         if (error?.code === 'failed-precondition') {
           console.error('需要創建複合索引。請訪問 Firebase Console 創建索引：', error.message);
@@ -84,37 +85,53 @@ export default function TaskHistory() {
     };
   }, []);
 
+  // 依日期分組
+  const groupedByDate: { [date: string]: Task[] } = {};
+  tasks.forEach(task => {
+    const dateStr = task.timestamp.toLocaleDateString();
+    if (!groupedByDate[dateStr]) groupedByDate[dateStr] = [];
+    groupedByDate[dateStr].push(task);
+  });
+
+  const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+    // 轉成 Date 物件比較
+    return new Date(b).getTime() - new Date(a).getTime();
+  });
+
   return (
     <Card>
       <Card.Header>任務歷史</Card.Header>
       <ListGroup variant="flush">
-        {tasks.map((task) => (
-          <ListGroup.Item
-            key={task.id}
-            className="d-flex justify-content-between align-items-center"
-          >
-            <div>
-              {task.task || '未命名任務'}
-              <br />
-              <small className="text-muted">
-                {task.timestamp.toLocaleDateString()} {task.timestamp.toLocaleTimeString()}
-              </small>
-            </div>
-            <div className="d-flex gap-2 align-items-center">
-              <Badge bg={task.completed ? 'success' : 'warning'}>
-                總時間: {task.duration} 分鐘
-              </Badge>
-              <Badge bg="info">
-                {task.type === 'focus' ? '專注' : '休息'}
-              </Badge>
-            </div>
-          </ListGroup.Item>
-        ))}
-        {tasks.length === 0 && (
-          <ListGroup.Item className="text-center text-muted">
-            尚無任務記錄
-          </ListGroup.Item>
+        {sortedDates.length === 0 && (
+          <ListGroup.Item className="text-center text-muted">尚無任務記錄</ListGroup.Item>
         )}
+        {sortedDates.flatMap(dateStr => [
+          <ListGroup.Item key={"date-" + dateStr} className="bg-light fw-bold">
+            {dateStr}
+          </ListGroup.Item>,
+          ...groupedByDate[dateStr].map(task => (
+            <ListGroup.Item
+              key={task.id}
+              className="d-flex justify-content-between align-items-center"
+            >
+              <div>
+                {task.task || '未命名任務'}
+                <br />
+                <small className="text-muted">
+                  {task.timestamp.toLocaleTimeString()}
+                </small>
+              </div>
+              <div className="d-flex gap-2 align-items-center">
+                <Badge bg={task.completed ? 'success' : 'warning'}>
+                  總時間: {task.duration} 分鐘
+                </Badge>
+                <Badge bg="info">
+                  {task.type === 'focus' ? '專注' : '休息'}
+                </Badge>
+              </div>
+            </ListGroup.Item>
+          ))
+        ])}
       </ListGroup>
     </Card>
   );

@@ -82,11 +82,11 @@ export default function Goals() {
 
   return (
     <Card>
-      <Card.Header>目標追蹤</Card.Header>
+      <Card.Header>歷史任務進度追蹤</Card.Header>
       <Card.Body>
         <Form onSubmit={handleSubmit} className="mb-3">
           <Form.Group className="mb-3">
-            <Form.Label>目標名稱</Form.Label>
+            <Form.Label>追蹤任務名稱</Form.Label>
             <Form.Control
               type="text"
               value={newGoal.title}
@@ -104,7 +104,7 @@ export default function Goals() {
               min="1"
             />
           </Form.Group>
-          <Button type="submit">新增目標</Button>
+          <Button type="submit">新增追蹤任務</Button>
         </Form>
 
         <ListGroup>

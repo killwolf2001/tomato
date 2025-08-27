@@ -128,7 +128,7 @@ export default function Statistics() {
 
   return (
     <Card>
-      <Card.Header>統計資訊</Card.Header>
+      <Card.Header>歷史任務統計資訊</Card.Header>
       <Card.Body>
         <Form.Group className="mb-3">
           <Form.Label>選擇任務</Form.Label>
@@ -145,7 +145,7 @@ export default function Statistics() {
 
         <Row>
           <Col sm={6} md={3} className="text-center mb-3">
-            <h6>總任務數</h6>
+            <h6>總番茄數</h6>
             <h3>{stats.totalTasks}</h3>
           </Col>
           <Col sm={6} md={3} className="text-center mb-3">
@@ -157,7 +157,7 @@ export default function Statistics() {
             <h3>{stats.totalBreakMinutes} 分鐘</h3>
           </Col>
           <Col sm={6} md={3} className="text-center mb-3">
-            <h6>完成任務數</h6>
+            <h6>完成番茄數</h6>
             <h3>{stats.completedTasks}</h3>
           </Col>
           <Col sm={6} md={3} className="text-center mb-3">

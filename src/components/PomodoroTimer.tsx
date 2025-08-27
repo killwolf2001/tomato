@@ -313,13 +313,14 @@ export default function PomodoroTimer() {
             <Card.Body>
               <Tabs defaultActiveKey="history" className="mb-3">
                 {/* 任務歷史頁籤 */}
-                <Tab eventKey="history" title="任務歷史">
+                <Tab eventKey="history" title="本日達成">
                   {recentTasks.length > 0 ? (
                     <Card>
-                      <Card.Header>任務歷史</Card.Header>
+                      <Card.Header>任務列表</Card.Header>
                       <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                         <ListGroup variant="flush">
                           {recentTasks
+                            .filter(task => task.timestamp.toDateString() === new Date().toDateString())
                             .reduce((acc, task) => {
                               if (task.type === 'focus') {
                                 const cycleStart = task.timestamp.getTime();
@@ -328,9 +329,7 @@ export default function PomodoroTimer() {
                                   t.task === task.task &&
                                   Math.abs(t.timestamp.getTime() - cycleStart) < 300000 // 5分鐘內的休息時間
                                 );
-                                
                                 const totalDuration = task.duration + (breakTask?.duration || 0);
-                                
                                 acc.push({
                                   id: task.id,
                                   task: task.task,
@@ -462,12 +461,12 @@ export default function PomodoroTimer() {
                 </Tab>
 
                 {/* 目標追蹤頁籤 */}
-                <Tab eventKey="goals" title="目標追蹤">
+                <Tab eventKey="goals" title="達成情形">
                   <div className="p-3">
                     <div className="d-flex justify-content-between align-items-center mb-4">
-                      <h6>目標設置</h6>
+                      <h6>設置目標時間</h6>
                       <Button variant="outline-primary" size="sm" onClick={() => setShowGoalsModal(true)}>
-                        調整目標
+                        調整時間
                       </Button>
                     </div>
 
