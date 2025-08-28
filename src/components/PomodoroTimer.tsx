@@ -1,10 +1,9 @@
 'use client';
-
+import { collection, addDoc, query, orderBy, onSnapshot, getDocs, where, updateDoc } from 'firebase/firestore';
 import { useState, useEffect, useCallback } from 'react';
 import { Card, Button, Form, ProgressBar, ListGroup, Badge, Row, Col, Container, Tabs, Tab, Modal } from 'react-bootstrap';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlay, faPause, faStop } from '@fortawesome/free-solid-svg-icons';
-import { collection, addDoc, query, orderBy, limit, onSnapshot, getDocs, where, updateDoc } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 
 interface TimerSettings {
@@ -42,6 +41,15 @@ export default function PomodoroTimer() {
     weeklyMinutes: 600
   });
   const [showGoalsModal, setShowGoalsModal] = useState(false);
+
+  // 更新瀏覽器分頁標題顯示倒數時間
+  useEffect(() => {
+    if (isRunning && timeLeft > 0) {
+      document.title = `${formatTime(timeLeft)} - ${isFocusTime ? '專注' : '休息'} | 番茄鐘`;
+    } else {
+      document.title = '番茄鐘';
+    }
+  }, [isRunning, timeLeft, isFocusTime]);
 
   const resetTimer = () => {
     setTimeLeft(isFocusTime ? settings.focusTime * 60 : settings.breakTime * 60);
@@ -106,8 +114,7 @@ export default function PomodoroTimer() {
     const q = query(
       tasksRef,
       where('userId', '==', userId),
-      orderBy('timestamp', 'desc'),
-      limit(10)
+      orderBy('timestamp', 'desc')
     );
     
     // 返回取消訂閱函數
