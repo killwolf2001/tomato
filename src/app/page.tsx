@@ -4,6 +4,7 @@ import { Container, Row, Col, Tabs, Tab } from 'react-bootstrap';
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { logout } from '@/lib/logout';
 import Auth from '@/components/Auth';
 import PomodoroTimer from '@/components/PomodoroTimer';
 import TaskHistory from '@/components/TaskHistory';
@@ -26,8 +27,20 @@ export default function Home() {
 
   return (
     <Container fluid className="py-4">
-      <Row className="mb-4">
+      <Row className="mb-4 align-items-center">
         <Col lg={6} className="mx-auto">
+          <div className="d-flex justify-content-between align-items-center mb-2">
+            <span className="fw-bold">番茄鐘</span>
+            <button
+              className="btn btn-outline-danger btn-sm"
+              onClick={async () => {
+                await logout();
+                setUser(null);
+              }}
+            >
+              登出
+            </button>
+          </div>
           <PomodoroTimer />
         </Col>
       </Row>
